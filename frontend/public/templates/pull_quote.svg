@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1080" viewBox="0 0 1080 1080">
+  <rect x="0" y="0" width="1080" height="1080" fill="#F7F5F0" />
+  <rect x="72" y="80" width="88" height="6" fill="#1D6F63" />
+  <text x="72" y="130.00" font-family="Inter, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="19" font-weight="500" letter-spacing="3.2" fill="#5C6470"><tspan x="72" dy="0">TOPIC / VENUE TAG</tspan></text>
+
+  <text x="1000" y="320" text-anchor="end" font-family="'Source Serif 4', Charter, Georgia, serif" font-size="180" font-weight="600" fill="#1D6F63" fill-opacity="0.13">"</text>
+
+  <text x="72" y="226.00" font-family="'Source Serif 4', Charter, Georgia, serif" font-size="28" font-weight="400" fill="#14181D" fill-opacity="0.55"><tspan x="72" dy="0">Insert paper title here, truncated at</tspan><tspan x="72" dy="36">a word boundary if needed</tspan></text>
+  <rect x="72" y="306" width="64" height="3" fill="#1D6F63" />
+
+  <text x="72" y="400.00" font-family="'Source Serif 4', Charter, Georgia, 'Times New Roman', serif" font-size="40" font-weight="400" fill="#14181D"><tspan x="72" dy="0">Insert verbatim quote from the paper</tspan><tspan x="72" dy="54">here — an author's interpretive sentence</tspan><tspan x="72" dy="54">from the discussion or conclusion,</tspan><tspan x="72" dy="54">not a methods description.</tspan></text>
+
+  <text x="72" y="762.00" font-family="Inter, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="23" font-weight="500" fill="#14181D"><tspan x="72" dy="0">Insert author name here</tspan></text>
+  <text x="72" y="792.00" font-family="Inter, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="19" fill="#5C6470"><tspan x="72" dy="0">Institution and role of the attributed author</tspan></text>
+  <text x="72" y="870.00" font-family="Inter, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="19" fill="#5C6470" fill-opacity="0.85"><tspan x="72" dy="0">Where in the paper this appears, or why it matters.</tspan></text>
+
+  <line x1="72" y1="938" x2="1008" y2="938" stroke="#DCD7CC" stroke-width="1" />
+  <text x="72" y="974.00" font-family="Inter, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="16" fill="#5C6470"><tspan x="72" dy="0">Author et al., Journal Year, doi:...</tspan></text>
+</svg>

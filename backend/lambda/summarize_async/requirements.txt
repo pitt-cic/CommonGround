@@ -1,0 +1,4 @@
+boto3~=1.42.0
+pydantic-ai-slim[bedrock]
+pymupdf
+ftfy

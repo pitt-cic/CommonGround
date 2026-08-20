@@ -1,0 +1,71 @@
+:root {
+  --accent: #FFB81C;
+  --color-heading: #FFB81C;
+  --accent-aqua: #FFB81C;
+  --color-bg: #003594;
+  --color-bg-code: #002570;
+}
+
+body,
+.slide {
+  background-color: #003594 !important;
+}
+
+
+.topbar,
+.topbar-tab,
+.topbar-tab-sep {
+  background-color: #003594 !important;
+  color: #ffffff !important;
+  font-size: 0.6rem !important;
+}
+
+.slide a.topbar-tab.topbar-tab--active,
+.slide a.topbar-tab.topbar-tab--active:link,
+.slide a.topbar-tab.topbar-tab--active:visited,
+.slide a.topbar-tab.topbar-tab--active:hover,
+.topbar-tab--active {
+  color: #FFB81C !important;
+}
+
+.topbar-nav-btn,
+.topbar-nav-counter {
+  color: #FFB81C !important;
+  font-size: 0.6rem !important;
+}
+
+.slide li,
+.slide td,
+.slide th,
+.slide p {
+  color: #ffffff !important;
+}
+
+.slide h1,
+.slide h2,
+.slide h3 {
+  color: #FFB81C !important;
+}
+
+.slide table {
+  border-color: #FFB81C !important;
+}
+
+.slide th {
+  background-color: #002570 !important;
+  border-color: #FFB81C !important;
+}
+
+.slide td {
+  border-color: #FFB81C !important;
+}
+
+.slide code,
+.slide pre {
+  background-color: #002570 !important;
+  border-color: #FFB81C !important;
+}
+
+.slide strong {
+  color: #FFB81C !important;
+}

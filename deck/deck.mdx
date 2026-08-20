@@ -1,0 +1,129 @@
+import { Slide } from "deckx";
+
+<Slide layout="title" tab="intro">
+
+# CommonGround
+
+Created by: Tanishq Bansod and Vincent Zhu
+
+Collaborated with Kathleen McTigue, MD, MS, MPH and Megan Hamm, PhD
+
+</Slide>
+
+<Slide tab="problem">
+
+# The Problem
+
+- **High-impact research** never reaches the broader audiences who need it most
+
+
+- **Dense academic language** excludes non-specialists
+
+
+- **Scientists lack time** to translate their own findings
+
+</Slide>
+
+<Slide tab="solution">
+
+# The Solution
+
+
+
+Finding the **CommonGround** betweeen researchers and various audiences
+
+- A web app that translates complex research papers to the output of your choice 
+- Tailored to set and custom audiences
+
+Outputs: summaries, press releases, blog posts, LinkedIn posts, infographics
+
+</Slide>
+
+<Slide tab="architecture">
+
+# High Level Architecture
+
+
+
+```
+Browser → API Gateway → Lambda → Bedrock (Claude)
+              ↓               ↓
+           Cognito         DynamoDB (state)
+              ↓               ↓
+             S3 ← PDFs    S3 ← Infographic assets
+```
+
+- **CDK** IaC(Infrastructure as Code)
+- **Serverless** (pay per use)
+- Solution on **Github** for more technical details
+
+</Slide>
+
+<Slide tab="challenges">
+
+# Challenges
+
+Building CommonGround wasn't without friction:
+
+- New to **AWS**, started at the **CIC** in May
+- Fast Prototype, Longer Feedback Implementation
+- 2 Week Image Generation -> **Infographic** Generation  
+</Slide>
+
+<Slide tab="validation">
+
+# How We Know It Works
+
+- ~2 months of weekly meetings with Kathleen & Megan
+- Gave the webapp to Kate Ulreich (Head of Marketing for Pitt Digital), Kathleen, and Megan to test
+- Implemented any feedback (UI changes, prompt tweaks, etc)
+- Next Steps: Do a larger study to compare existing posts with our outputs
+
+</Slide>
+
+<Slide tab="pricing">
+
+# Pricing Breakdown
+
+**Estimated workload: 3-4 papers / month per org or department**
+
+| | Rate | Monthly cost |
+|---|---|---|
+| **Hosting** — one shared deployment | fixed | ~$10-20 |
+| **Paper processing** — generation + 10 refinements + 5 infographics | ~$2 / paper | ~$6-8 |
+| **Total** | | **~$20-30** |
+
+Cost scales **linearly** with papers processed, not with number of users.
+
+</Slide>
+
+<Slide tab="opensource">
+
+# Open Sourcing
+
+CommonGround is **fully open source**
+
+- MIT licensed — use it, fork it, build on it
+- All infrastructure as code (AWS CDK TypeScript)
+- Full backend, frontend, and deployment scripts included
+
+</Slide>
+
+<Slide theme="title" tab="demo">
+
+# Demo
+
+- Features
+- Human In The Loop
+
+</Slide>
+
+<Slide theme="title" tab="Conclusion">
+
+# Thank You
+
+- Thank You to everyone involved in this project (Kathleen, Megan, Kate, Maciej, Varun)
+
+- Any Questions?
+
+</Slide>

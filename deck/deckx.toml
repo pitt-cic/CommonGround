@@ -1,0 +1,15 @@
+title = "CommonGround"
+theme = "dark"           # light | dark | markdown-light | markdown-dark (default: light)
+
+tabs = [
+  { id = "intro", label = "Intro" },
+  { id = "problem", label = "Problem" },
+  { id = "solution", label = "Solution" },
+  { id = "architecture", label = "Architecture" },
+  { id = "challenges", label = "Challenges" },
+  { id = "validation", label = "Validation" },
+  { id = "pricing", label = "Pricing" },
+  { id = "opensource", label = "Open Source" },
+  { id = "demo", label = "Demo" },
+  { id = "questions", label = "Questions" },
+]

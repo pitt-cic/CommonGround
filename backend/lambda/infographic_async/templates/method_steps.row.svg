@@ -1,0 +1,12 @@
+  <g>
+    <circle cx="100" cy="{{MARK_Y}}" r="17" fill="#F7F5F0" stroke="#1D6F63" stroke-width="2" />
+    <text x="100" y="{{MARK_TEXT_Y}}" text-anchor="middle"
+          font-family="Inter, 'Helvetica Neue', Helvetica, Arial, sans-serif"
+          font-size="16" font-weight="500" fill="#1D6F63"><tspan x="100" dy="0">{{NUM}}</tspan></text>
+    <text x="152" y="{{TITLE_Y}}" data-field="{{ID}}_title" data-maxw="856" data-maxlines="1"
+          font-family="'Source Serif 4', Charter, Georgia, serif"
+          font-size="26" font-weight="600" fill="#14181D">{{TITLE}}</text>
+    <text x="152" y="{{BODY_Y}}" data-field="{{ID}}_body" data-maxw="856" data-maxlines="{{BODY_LINES}}" data-lead="24"
+          font-family="Inter, 'Helvetica Neue', Helvetica, Arial, sans-serif"
+          font-size="18" fill="#5C6470">{{BODY}}</text>
+  </g>
