@@ -47,7 +47,7 @@ CommonGround addresses these challenges through an intelligent document transfor
 
 **Summarization and Refinement:** Uploaded PDFs are stored in S3 and processed by a summarize Lambda powered by Claude Sonnet 4.6 via Amazon Bedrock. The AI follows audience-specific prompts, jargon-free analogies for the general public, practical takeaways for clinicians, methodology focus for researchers, and supports custom audiences (e.g., "high school schools") with dynamically generated prompts. Output format prompts shape the same content into summaries, press releases, blog posts, LinkedIn posts, or X/Twitter content. CommonGround maintains conversation history in DynamoDB so users can refine outputs with natural language instructions without regenerating from scratch, and can manually edit the generated text to keep a human in the loop before sharing.
 
-**Infographic Generation:** Users can generate a visual infographic from the paper, with five template layouts available to choose from. Pydantic AI's structured output extracts the relevant content into fixed slots, which are rendered into an SVG. Users can edit individual fields or apply AI polish with a natural language prompt.   
+**Infographic Generation:** Users can generate a visual infographic from the paper, with five SVG template layouts available to choose from. Pydantic AI's structured output extracts the relevant content into fixed slots, which are rendered into an SVG. Users can edit individual fields or apply AI polish with a natural language prompt.   
 
 **Citation Verification:**  Every statistic is backed by a verbatim quote from the source paper and automatically verified against the extracted text. Unverified claims are flagged so users can review AI accuracy before publishing.   
 
