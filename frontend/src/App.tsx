@@ -10,7 +10,7 @@ import StepIndicator from './components/Steps/StepIndicator';
 import { useAuth } from './hooks/useAuth';
 import { useTheme } from './hooks/useTheme';
 import UploadStep from './components/Steps/UploadStep';
-import CustomizeStep, { type OutputTypeId, type CustomAudience, type InfographicTemplateId, MODEL } from './components/Steps/CustomizeStep';
+import CustomizeStep, { type OutputTypeId, type CustomAudience, type InfographicTemplateId } from './components/Steps/CustomizeStep';
 import GenerateStep from './components/Steps/GenerateStep';
 import ResultsStep from './components/Steps/ResultsStep';
 import { startSummarization } from './services/api';
@@ -107,7 +107,7 @@ function MainApp() {
 
       const outputFormat = mapOutputTypeToFormat(outputType);
 
-      const response = await startSummarization(s3Key, audience, outputFormat, MODEL.apiId, customDetails, infographicTemplate ?? undefined);
+      const response = await startSummarization(s3Key, audience, outputFormat, customDetails, infographicTemplate ?? undefined);
       setJobId(response.job_id);
 
       go(3);

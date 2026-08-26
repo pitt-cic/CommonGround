@@ -3,7 +3,7 @@ Common Ground - Summarize Lambda
 Path: backend/lambda/summarize_async/handler.py
 
 POST /papers/summarize
-Request body:  { "s3_key": "papers/uuid/some_paper.pdf", "audience": "general_public" | "clinicians" | "academic_health_researchers", "model": "sonnet-4-6" }
+Request body:  { "s3_key": "papers/uuid/some_paper.pdf", "audience": "general_public" | "clinicians" | "academic_health_researchers" }
 Response:      { "audience": "general_public", "summary": "..." }
 """
 
@@ -23,10 +23,12 @@ from pydantic_ai.models.bedrock import BedrockConverseModel
 from pydantic_ai.providers.bedrock import BedrockProvider
 from pydantic_ai.settings import ModelSettings
 from pydantic_ai.messages import BinaryContent
-from shared.pricing import PRICING, compute_cost
+from shared.pricing import compute_cost
 from shared.verify import verify_citation
+from shared.response import _response
 from prompts import (
     AUDIENCE_PROMPTS,
+    CITATION_SYSTEM_PROMPT,
     OUTPUT_FORMAT_PROMPTS,
     build_custom_audience_prompt,
 )
@@ -54,28 +56,10 @@ table = dynamodb.Table(os.environ["TABLE_NAME"])
 
 BUCKET_NAME = os.environ["BUCKET_NAME"]
 GENERATE_INFOGRAPHIC_FUNCTION = os.environ.get("GENERATE_INFOGRAPHIC_FUNCTION_NAME")
-DEFAULT_MODEL = "sonnet-4-6"
-MODEL_IDS = {k: v["bedrock_id"] for k, v in PRICING.items()}
+BEDROCK_MODEL_ID = os.environ["BEDROCK_MODEL_ID"]
+PRICING_KEY = "sonnet-4-6"
 CHUNK_THRESHOLD_PAGES = 50
 MIN_EXTRACTED_CHARS = 5000
-
-CITATION_SYSTEM_PROMPT = """You are creating content from a research paper AND extracting source citations.
-
-For every statistic or quantitative claim you include in the content, you MUST also provide a citation with:
-1. The exact statistic as written in your content
-2. The EXACT verbatim quote from the paper (copy character-for-character, max 400 chars)
-3. Which section the quote comes from (Abstract, Results, Methods, Discussion, Conclusion, Table N, Figure N)
-
-Rules:
-- The content field should be clean text with NO citation markers or references
-- Every number/percentage/statistic in your content needs a corresponding citation
-- Copy quotes EXACTLY as they appear in the paper - do NOT paraphrase or rephrase
-- If you can't find the exact quote for a statistic, don't include that statistic in the content
-
-IMPORTANT: The content length limits specified in the format instructions apply ONLY to the content field.
-The citations are separate and do not count toward the content length limit.
-Keep content within the specified word/character limits for the output format.
-"""
 
 
 _LIGATURE_MAP = {
@@ -108,89 +92,60 @@ def _clean_extracted_text(raw: str) -> str:
     return text.strip()
 
 
-def _summarize_single_shot_text(
-    extracted_text: str, audience: str, output_format: str, model_id: str, job_id: str = None, custom_audience_details: str = None
-) -> tuple:
-    """Summarize using extracted text with structured output including citations."""
-
+def _build_format_instruction(audience, output_format, custom_audience_details=None):
     if audience == "custom_audience" and custom_audience_details:
         audience_context = build_custom_audience_prompt(custom_audience_details)
     else:
         audience_context = AUDIENCE_PROMPTS[audience]
-
     current_date = datetime.now(timezone.utc).strftime("%B %d, %Y")
-    format_instruction = OUTPUT_FORMAT_PROMPTS[output_format].format(
+    return OUTPUT_FORMAT_PROMPTS[output_format].format(
         audience_prompt=audience_context,
         current_date=current_date,
     )
 
-    max_tokens = 8192
-    bedrock_model_id = MODEL_IDS[model_id]
 
-    bedrock_model = BedrockConverseModel(bedrock_model_id, provider=bedrock_provider)
-    model_settings = ModelSettings(max_tokens=max_tokens, temperature=0.7)
-
+def _build_summary_agent(model_id, format_instruction):
     system_prompt = CITATION_SYSTEM_PROMPT + "\n\n" + format_instruction
-    agent = Agent(
+    bedrock_model = BedrockConverseModel(model_id, provider=bedrock_provider)
+    return Agent(
         model=bedrock_model,
         output_type=SummaryWithCitations,
-        model_settings=model_settings,
+        model_settings=ModelSettings(max_tokens=8192, temperature=0.7),
         system_prompt=system_prompt,
         retries=2,
     )
 
-    result = agent.run_sync(extracted_text)
-    input_tokens = result.usage.input_tokens if result.usage else 0
-    output_tokens = result.usage.output_tokens if result.usage else 0
+
+def _extract_result(result):
+    input_tokens = (result.usage.input_tokens or 0) if result.usage else 0
+    output_tokens = (result.usage.output_tokens or 0) if result.usage else 0
     content = result.output.content
     citations = [c.model_dump() for c in result.output.citations]
-    return content, citations, input_tokens or 0, output_tokens or 0
+    return content, citations, input_tokens, output_tokens
+
+
+def _summarize_single_shot_text(
+    extracted_text: str, audience: str, output_format: str, model_id: str, job_id: str = None, custom_audience_details: str = None
+) -> tuple:
+    format_instruction = _build_format_instruction(audience, output_format, custom_audience_details)
+    agent = _build_summary_agent(model_id, format_instruction)
+    result = agent.run_sync(extracted_text)
+    return _extract_result(result)
 
 
 def _summarize_single_shot_pdf(
     pdf_bytes: bytes, audience: str, output_format: str, model_id: str, job_id: str = None, custom_audience_details: str = None
 ) -> tuple:
-    """Summarize using PDF document block with structured output including citations."""
-
-    if audience == "custom_audience" and custom_audience_details:
-        audience_context = build_custom_audience_prompt(custom_audience_details)
-    else:
-        audience_context = AUDIENCE_PROMPTS[audience]
-
-    current_date = datetime.now(timezone.utc).strftime("%B %d, %Y")
-    format_instruction = OUTPUT_FORMAT_PROMPTS[output_format].format(
-        audience_prompt=audience_context,
-        current_date=current_date,
-    )
-
-    max_tokens = 8192
-    bedrock_model_id = MODEL_IDS[model_id]
-
-    bedrock_model = BedrockConverseModel(bedrock_model_id, provider=bedrock_provider)
-    model_settings = ModelSettings(max_tokens=max_tokens, temperature=0.7)
-
-    system_prompt = CITATION_SYSTEM_PROMPT + "\n\n" + format_instruction
-    agent = Agent(
-        model=bedrock_model,
-        output_type=SummaryWithCitations,
-        model_settings=model_settings,
-        system_prompt=system_prompt,
-        retries=2,
-    )
-
+    format_instruction = _build_format_instruction(audience, output_format, custom_audience_details)
+    agent = _build_summary_agent(model_id, format_instruction)
     result = agent.run_sync(BinaryContent(data=pdf_bytes, media_type="application/pdf"))
-    input_tokens = result.usage.input_tokens if result.usage else 0
-    output_tokens = result.usage.output_tokens if result.usage else 0
-    content = result.output.content
-    citations = [c.model_dump() for c in result.output.citations]
-    return content, citations, input_tokens or 0, output_tokens or 0
+    return _extract_result(result)
 
 
 def _summarize_chunked(
     pdf_bytes: bytes, audience: str, output_format: str, model_id: str, job_id: str = None, custom_audience_details: str = None
 ) -> tuple:
     """Chunked path for large PDFs. Merges citations from both halves."""
-
     doc = pymupdf.open(stream=pdf_bytes, filetype="pdf")
     total_pages = len(doc)
     midpoint = total_pages // 2
@@ -203,17 +158,7 @@ def _summarize_chunked(
     first_half, citations1, in1, out1 = _summarize_single_shot_pdf(_half_bytes(0, midpoint), audience, output_format, model_id, job_id, custom_audience_details)
     second_half, citations2, in2, out2 = _summarize_single_shot_pdf(_half_bytes(midpoint, total_pages), audience, output_format, model_id, job_id, custom_audience_details)
 
-    if audience == "custom_audience" and custom_audience_details:
-        audience_context = build_custom_audience_prompt(custom_audience_details)
-    else:
-        audience_context = AUDIENCE_PROMPTS[audience]
-
-    current_date = datetime.now(timezone.utc).strftime("%B %d, %Y")
-    format_instruction = OUTPUT_FORMAT_PROMPTS[output_format].format(
-        audience_prompt=audience_context,
-        current_date=current_date,
-    )
-
+    format_instruction = _build_format_instruction(audience, output_format, custom_audience_details)
     merge_prompt = (
         f"{format_instruction}\n\n"
         "Below are two parts of the same paper that need to be merged. "
@@ -222,30 +167,12 @@ def _summarize_chunked(
         f"FIRST HALF:\n{first_half}\n\nSECOND HALF:\n{second_half}"
     )
 
-    max_tokens = 8192
-    bedrock_model_id = MODEL_IDS[model_id]
-
-    bedrock_model = BedrockConverseModel(bedrock_model_id, provider=bedrock_provider)
-    model_settings = ModelSettings(max_tokens=max_tokens, temperature=0.7)
-
-    system_prompt = CITATION_SYSTEM_PROMPT + "\n\n" + format_instruction
-    agent = Agent(
-        model=bedrock_model,
-        output_type=SummaryWithCitations,
-        model_settings=model_settings,
-        system_prompt=system_prompt,
-        retries=2,
-    )
-
+    agent = _build_summary_agent(model_id, format_instruction)
     result = agent.run_sync(merge_prompt)
-    input_tokens = (result.usage.input_tokens or 0) if result.usage else 0
-    output_tokens = (result.usage.output_tokens or 0) if result.usage else 0
-    content = result.output.content
-    # Merge all citations, preferring the merged result's citations
-    merged_citations = [c.model_dump() for c in result.output.citations]
-    # Also include citations from halves that might not be in merged result
+    content, merged_citations, input_tokens, output_tokens = _extract_result(result)
+
+    # Merge citations from both halves, deduping by statistic
     all_citations = merged_citations + citations1 + citations2
-    # Dedupe by statistic
     seen = set()
     unique_citations = []
     for c in all_citations:
@@ -270,7 +197,7 @@ def handler(event, context):
         audience = body.get("audience")
         custom_audience_details = body.get("custom_audience_details")
         output_format = body.get("output_format", "summary")
-        model_id = body.get("model", DEFAULT_MODEL)
+        model_id = BEDROCK_MODEL_ID
         job_id = body.get("job_id")
         bucket_name = body.get("bucket_name", BUCKET_NAME)
         infographic_template = body.get("infographic_template")
@@ -282,9 +209,6 @@ def handler(event, context):
             return _response(400, {"error": f"audience must be one of {valid_audiences}"})
         if output_format not in OUTPUT_FORMAT_PROMPTS:
             return _response(400, {"error": f"output_format must be one of {list(OUTPUT_FORMAT_PROMPTS.keys())}"})
-        if model_id not in MODEL_IDS:
-            return _response(400, {"error": f"Invalid model: {model_id}. Must be one of: {list(MODEL_IDS.keys())}"})
-
         try:
             pdf_bytes = s3.get_object(Bucket=bucket_name, Key=s3_key)["Body"].read()
         except s3.exceptions.NoSuchKey:
@@ -363,7 +287,7 @@ def handler(event, context):
                     pdf_bytes, audience, output_format, model_id, job_id, custom_audience_details
                 )
 
-        cost = compute_cost(model_id, input_tokens, output_tokens)
+        cost = compute_cost(PRICING_KEY, input_tokens, output_tokens)
 
         now = datetime.now(timezone.utc).isoformat()
         cost_entry = {
@@ -495,14 +419,3 @@ def handler(event, context):
                 print(f"[ERROR] Failed to write failure status for job {job_id}: {dynamo_err}")
 
         return _response(500, {"error": "Internal server error"})
-
-
-def _response(status_code, body_dict):
-    return {
-        "statusCode": status_code,
-        "headers": {
-            "Content-Type": "application/json",
-            "Access-Control-Allow-Origin": "*",
-        },
-        "body": json.dumps(body_dict),
-    }

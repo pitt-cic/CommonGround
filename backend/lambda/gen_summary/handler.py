@@ -3,7 +3,7 @@ Common Ground - Async Summarize Trigger Lambda
 Path: backend/lambda/gen_summary/handler.py
 
 POST /papers/summarize
-Request body:  { "s3_key": "papers/uuid/some_paper.pdf", "audience": "general_public" | "clinicians" | "academic_health_researchers", "model": "sonnet-4-6" }
+Request body:  { "s3_key": "papers/uuid/some_paper.pdf", "audience": "general_public" | "clinicians" | "academic_health_researchers" }
 Response:      { "job_id": "uuid" }
 
 The actual summary will be written to s3://bucket/summaries/{job_id}.json when ready.
@@ -17,6 +17,7 @@ from datetime import datetime, timezone
 
 import boto3
 from botocore.exceptions import ClientError
+from shared.response import _response
 
 lambda_client = boto3.client("lambda")
 dynamodb = boto3.resource("dynamodb")
@@ -53,7 +54,6 @@ BUCKET_NAME = os.environ["BUCKET_NAME"]
 
 VALID_AUDIENCES = ["general_public", "clinicians", "academic_health_researchers", "custom_audience"]
 VALID_OUTPUT_FORMATS = ["summary", "press_release", "blog_post", "linkedin_post", "x_post"]
-VALID_MODELS = ["sonnet-4-6"]
 VALID_INFOGRAPHIC_TEMPLATES = ["stat_grid", "key_findings", "method_steps", "pull_quote", "comparison"]
 
 
@@ -69,7 +69,7 @@ def handler(event, context):
         audience = body.get("audience")
         custom_audience_details = body.get("custom_audience_details")  # Optional custom audience info
         output_format = body.get("output_format", "summary")  # Default to summary
-        model = body.get("model", "sonnet-4-6")  # Default to sonnet-4-6
+        model = os.environ["BEDROCK_MODEL_ID"]
         infographic_template = body.get("infographic_template")  # Optional infographic template
 
         if not s3_key:
@@ -91,10 +91,6 @@ def handler(event, context):
                 400,
                 {"error": f"output_format must be one of {VALID_OUTPUT_FORMATS}"},
             )
-
-        # Validate model selection
-        if model not in VALID_MODELS:
-            return _response(400, {"error": f"Invalid model: {model}. Must be one of: {VALID_MODELS}"})
 
         # Validate infographic template if provided
         if infographic_template and infographic_template not in VALID_INFOGRAPHIC_TEMPLATES:
@@ -162,14 +158,3 @@ def handler(event, context):
     except Exception as e:
         print(f"Async summarize handler error: {e}")
         return _response(500, {"error": "Internal server error"})
-
-
-def _response(status_code, body_dict):
-    return {
-        "statusCode": status_code,
-        "headers": {
-            "Content-Type": "application/json",
-            "Access-Control-Allow-Origin": "*",
-        },
-        "body": json.dumps(body_dict),
-    }

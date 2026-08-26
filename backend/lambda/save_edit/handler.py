@@ -12,6 +12,7 @@ import os
 from datetime import datetime, timezone
 
 import boto3
+from shared.response import _response
 
 dynamodb = boto3.resource("dynamodb")
 table = dynamodb.Table(os.environ["TABLE_NAME"])
@@ -64,14 +65,3 @@ def handler(event, context):
     except Exception as e:
         print(f"Save edit handler error: {e}")
         return _response(500, {"error": "Internal server error"})
-
-
-def _response(status_code, body_dict):
-    return {
-        "statusCode": status_code,
-        "headers": {
-            "Content-Type": "application/json",
-            "Access-Control-Allow-Origin": "*",
-        },
-        "body": json.dumps(body_dict),
-    }
