@@ -294,14 +294,6 @@ export async function generateInfographic(
     throw new Error('Not authenticated');
   }
 
-  // Resolve alias to canonical template id for polling
-  const aliases: Record<string, string> = {
-    'template-1': 'stat_grid',
-    'template-2': 'method_steps',
-    'template-3': 'key_findings',
-  };
-  const canonical = aliases[templateId] ?? templateId;
-
   // POST kicks off async generation, returns 202
   const response = await fetch(`${API_BASE_URL}papers/summarize/${jobId}/infographic`, {
     method: 'POST',
@@ -320,9 +312,9 @@ export async function generateInfographic(
     throw new Error(body.error || `HTTP ${response.status}: ${response.statusText}`);
   }
 
-  // Poll job status until infographic_{canonical}_status is completed/failed/not_applicable
-  const statusKey = `infographic_${canonical}_status`;
-  const reasonKey = `infographic_${canonical}_reason`;
+  // Poll job status until infographic_{templateId}_status is completed/failed/not_applicable
+  const statusKey = `infographic_${templateId}_status`;
+  const reasonKey = `infographic_${templateId}_reason`;
 
   for (let attempt = 0; attempt < 60; attempt++) {
     await new Promise(resolve => setTimeout(resolve, 3000));
@@ -331,7 +323,7 @@ export async function generateInfographic(
 
     if (infStatus === 'completed') {
       // Fetch SVG from S3 using presigned URL
-      const presignedUrl = status.infographic_urls?.[canonical];
+      const presignedUrl = status.infographic_urls?.[templateId];
       if (!presignedUrl) {
         throw new Error('Infographic URL not available');
       }

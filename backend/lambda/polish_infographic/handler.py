@@ -38,12 +38,6 @@ BUCKET_NAME = os.environ["BUCKET_NAME"]
 BEDROCK_MODEL_ID = os.environ["BEDROCK_MODEL_ID"]
 PRICING_KEY = "sonnet-4-6"
 
-TEMPLATE_ALIASES = {
-    "template-1": "stat_grid",
-    "template-2": "method_steps",
-    "template-3": "key_findings",
-}
-
 CORS_HEADERS = {
     "Content-Type": "application/json",
     "Access-Control-Allow-Origin": "*",
@@ -94,17 +88,16 @@ def handler(event, context):
     except json.JSONDecodeError:
         return _response(400, {"error": "Request body is not valid JSON"})
 
-    requested = body.get("template_id")
+    template_id = body.get("template_id")
     user_prompt = body.get("prompt", "").strip()
 
-    if not requested:
+    if not template_id:
         return _response(400, {"error": "template_id is required"})
     if not user_prompt:
         return _response(400, {"error": "prompt is required"})
     if len(user_prompt) > 500:
         return _response(400, {"error": "prompt must be 500 characters or less"})
 
-    template_id = TEMPLATE_ALIASES.get(requested, requested)
     if template_id not in TEMPLATE_REGISTRY:
         return _response(400, {"error": "Invalid template_id", "valid": sorted(TEMPLATE_REGISTRY)})
 
