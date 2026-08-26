@@ -28,12 +28,6 @@ table = dynamodb.Table(os.environ["TABLE_NAME"])
 
 BUCKET_NAME = os.environ["BUCKET_NAME"]
 
-TEMPLATE_ALIASES = {
-    "template-1": "stat_grid",
-    "template-2": "method_steps",
-    "template-3": "key_findings",
-}
-
 CORS_HEADERS = {
     "Content-Type": "application/json",
     "Access-Control-Allow-Origin": "*",
@@ -83,12 +77,11 @@ def handler(event, context):
 def handle_get(event, job_id):
     """Fetch content JSON for a template."""
     query_params = event.get("queryStringParameters") or {}
-    requested = query_params.get("template_id")
+    template_id = query_params.get("template_id")
 
-    if not requested:
+    if not template_id:
         return _response(400, {"error": "template_id query parameter is required"})
 
-    template_id = TEMPLATE_ALIASES.get(requested, requested)
     if template_id not in TEMPLATE_REGISTRY:
         return _response(400, {"error": "Invalid template_id", "valid": sorted(TEMPLATE_REGISTRY)})
 
@@ -158,16 +151,15 @@ def handle_put(event, job_id):
     except json.JSONDecodeError:
         return _response(400, {"error": "Request body is not valid JSON"})
 
-    requested = body.get("template_id")
+    template_id = body.get("template_id")
     content = body.get("content")
     preview_only = body.get("preview", False)
 
-    if not requested:
+    if not template_id:
         return _response(400, {"error": "template_id is required"})
     if not content or not isinstance(content, dict):
         return _response(400, {"error": "content object is required"})
 
-    template_id = TEMPLATE_ALIASES.get(requested, requested)
     if template_id not in TEMPLATE_REGISTRY:
         return _response(400, {"error": "Invalid template_id", "valid": sorted(TEMPLATE_REGISTRY)})
 
