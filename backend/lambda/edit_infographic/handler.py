@@ -11,7 +11,6 @@ PUT  /papers/summarize/{job_id}/infographic/content
 
 import json
 import os
-import traceback
 import xml.etree.ElementTree as ET
 from decimal import Decimal
 

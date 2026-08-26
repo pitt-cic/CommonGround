@@ -10,7 +10,6 @@ validates against the same schema, re-renders, and updates DynamoDB.
 
 import json
 import os
-import traceback
 import xml.etree.ElementTree as ET
 from decimal import Decimal
 
