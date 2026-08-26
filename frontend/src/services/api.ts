@@ -144,7 +144,6 @@ export async function startSummarization(
   s3Key: string,
   audience: string,
   outputFormat: string,
-  model: string,
   customAudienceDetails?: string,
   infographicTemplate?: string
 ): Promise<SummarizeResponse> {
@@ -157,7 +156,6 @@ export async function startSummarization(
     s3_key: s3Key,
     audience,
     output_format: outputFormat,
-    model,
   };
 
   if (customAudienceDetails) {

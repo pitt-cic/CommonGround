@@ -10,12 +10,12 @@ validates against the same schema, re-renders, and updates DynamoDB.
 
 import json
 import os
-import traceback
 import xml.etree.ElementTree as ET
 from decimal import Decimal
 
 import boto3
 from shared.pricing import compute_cost
+from shared.response import _response
 from botocore.exceptions import ClientError
 from pydantic import ValidationError
 from pydantic_ai import Agent
@@ -51,13 +51,6 @@ CORS_HEADERS = {
     "Access-Control-Allow-Methods": "OPTIONS,POST",
 }
 
-
-def _response(status_code, body_dict):
-    return {
-        "statusCode": status_code,
-        "headers": CORS_HEADERS,
-        "body": json.dumps(body_dict),
-    }
 
 
 def _build_polish_agent(output_type, guidance):

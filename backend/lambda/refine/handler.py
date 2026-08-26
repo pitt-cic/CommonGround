@@ -18,7 +18,7 @@ from pydantic_ai import Agent
 from pydantic_ai.models.bedrock import BedrockConverseModel
 from pydantic_ai.providers.bedrock import BedrockProvider
 from pydantic_ai.settings import ModelSettings
-from shared.pricing import PRICING, compute_cost
+from shared.pricing import compute_cost
 
 s3 = boto3.client("s3")
 bedrock_client = boto3.client("bedrock-runtime")
@@ -28,10 +28,9 @@ dynamodb = boto3.resource("dynamodb")
 
 TABLE_NAME = os.environ["TABLE_NAME"]
 BUCKET_NAME = os.environ.get("BUCKET_NAME")
-DEFAULT_MODEL = "sonnet-4-6"
+BEDROCK_MODEL_ID = os.environ["BEDROCK_MODEL_ID"]
+PRICING_KEY = "sonnet-4-6"
 table = dynamodb.Table(TABLE_NAME)
-
-MODEL_IDS = {k: v["bedrock_id"] for k, v in PRICING.items()}
 
 SYSTEM_INSTRUCTION = (
     "You are refining a summary of a research paper. The user's instruction should be applied to modify the EXISTING content.\n\n"
@@ -101,21 +100,18 @@ def handler(event, context):
                     messages[i] = {"role": "assistant", "content": edited_output}
                     break
 
-        # Read model from the job item so refine is priced against the model the user chose
-        model_id = item.get("claude_model") or DEFAULT_MODEL
+        model_id = BEDROCK_MODEL_ID
 
         # Use the same max tokens as the original output format
         output_format = item.get("output_format", "summary")
         max_tokens = 8192
-
-        bedrock_model_id = MODEL_IDS.get(model_id, MODEL_IDS[DEFAULT_MODEL])
 
         # Add format-specific constraints to instructions
         instructions = SYSTEM_INSTRUCTION
         if output_format in FORMAT_CONSTRAINTS:
             instructions = instructions + "\n\n" + FORMAT_CONSTRAINTS[output_format]
 
-        bedrock_model = BedrockConverseModel(bedrock_model_id, provider=bedrock_provider)
+        bedrock_model = BedrockConverseModel(model_id, provider=bedrock_provider)
         model_settings = ModelSettings(max_tokens=max_tokens, temperature=0.7)
         agent = Agent(
             model=bedrock_model,
@@ -145,7 +141,7 @@ def handler(event, context):
         input_tokens = (usage.input_tokens or 0) if usage else 0
         output_tokens = (usage.output_tokens or 0) if usage else 0
 
-        cost = compute_cost(model_id, input_tokens, output_tokens)
+        cost = compute_cost(PRICING_KEY, input_tokens, output_tokens)
         now = datetime.now(timezone.utc).isoformat()
         cost_entry = {
             "type": "refine",

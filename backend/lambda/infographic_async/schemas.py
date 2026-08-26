@@ -9,21 +9,6 @@ prompt does not work.
 Limits are derived from the slot geometry in templates/*.svg (font size x
 available width x permitted line count) with roughly 8% headroom, so the
 renderer's shrink-to-fit path is an emergency brake rather than the norm.
-
-Usage with Pydantic AI:
-
-    from pydantic_ai import Agent
-    from pydantic_ai.models.bedrock import BedrockConverseModel
-    from schemas import StatGridContent
-    from render import render
-
-    agent = Agent(
-        BedrockConverseModel("us.anthropic.claude-sonnet-4-5-20250929-v1:0"),
-        output_type=StatGridContent,
-        system_prompt=SYSTEM_PROMPT + StatGridContent.guidance(),
-    )
-    result = await agent.run(paper_text)
-    svg = render("stat_grid", result.output.model_dump())
 """
 
 from __future__ import annotations
