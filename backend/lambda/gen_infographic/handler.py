@@ -17,12 +17,13 @@ import time
 
 import boto3
 from botocore.exceptions import ClientError
+from shared.response import _response
 
 lambda_client = boto3.client("lambda")
 dynamodb = boto3.resource("dynamodb")
 table = dynamodb.Table(os.environ["TABLE_NAME"])
 
-GENERATE_FUNCTION = os.environ["GENERATE_FUNCTION_NAME"]
+GENERATE_FUNCTION = os.environ["GENERATE_INFOGRAPHIC_FUNCTION_NAME"]
 
 CORS_HEADERS = {
     "Content-Type": "application/json",
@@ -38,13 +39,6 @@ VALID_TEMPLATES = {
 
 MAX_INFOGRAPHIC_GENERATIONS = 50
 
-
-def _response(status_code, body_dict):
-    return {
-        "statusCode": status_code,
-        "headers": CORS_HEADERS,
-        "body": json.dumps(body_dict),
-    }
 
 
 def handler(event, context):

@@ -74,6 +74,25 @@ OUTPUT_FORMAT_PROMPTS = {
     ),
 }
 
+CITATION_SYSTEM_PROMPT = """You are creating content from a research paper AND extracting source citations.
+
+For every statistic or quantitative claim you include in the content, you MUST also provide a citation with:
+1. The exact statistic as written in your content
+2. The EXACT verbatim quote from the paper (copy character-for-character, max 400 chars)
+3. Which section the quote comes from (Abstract, Results, Methods, Discussion, Conclusion, Table N, Figure N)
+
+Rules:
+- The content field should be clean text with NO citation markers or references
+- Every number/percentage/statistic in your content needs a corresponding citation
+- Copy quotes EXACTLY as they appear in the paper - do NOT paraphrase or rephrase
+- If you can't find the exact quote for a statistic, don't include that statistic in the content
+
+IMPORTANT: The content length limits specified in the format instructions apply ONLY to the content field.
+The citations are separate and do not count toward the content length limit.
+Keep content within the specified word/character limits for the output format.
+"""
+
+
 def build_custom_audience_prompt(details: str) -> str:
     """Build a tailored audience prompt from custom audience details."""
     return (

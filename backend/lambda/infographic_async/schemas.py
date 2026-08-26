@@ -18,7 +18,7 @@ Usage with Pydantic AI:
     from render import render
 
     agent = Agent(
-        BedrockConverseModel("us.anthropic.claude-sonnet-4-5-20250929-v1:0"),
+        BedrockConverseModel(os.environ["BEDROCK_MODEL_ID"]),
         output_type=StatGridContent,
         system_prompt=SYSTEM_PROMPT + StatGridContent.guidance(),
     )

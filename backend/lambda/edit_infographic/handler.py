@@ -21,6 +21,7 @@ from pydantic import ValidationError
 
 from render import render
 from schemas import TEMPLATE_REGISTRY
+from shared.response import _response
 
 s3 = boto3.client("s3")
 dynamodb = boto3.resource("dynamodb")
@@ -42,13 +43,6 @@ CORS_HEADERS = {
     "Access-Control-Max-Age": "86400",
 }
 
-
-def _response(status_code, body_dict):
-    return {
-        "statusCode": status_code,
-        "headers": CORS_HEADERS,
-        "body": json.dumps(body_dict),
-    }
 
 
 def _set_infographic_status(job_id, template_id, status):

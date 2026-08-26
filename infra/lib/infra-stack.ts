@@ -146,6 +146,26 @@ export class InfraStack extends cdk.Stack {
             },
         });
 
+        // Shared layer: shared Python utilities (response helpers, pricing, etc.) used across all Lambdas
+        const sharedLayer = new lambda.LayerVersion(this, `SharedLayer-${props?.stackName}`, {
+            layerVersionName: `SharedLayer-${props?.stackName}`,
+            code: lambda.Code.fromAsset(
+                path.join(__dirname, '../../backend/lambda'),
+                {
+                    bundling: {
+                        image: lambda.Runtime.PYTHON_3_12.bundlingImage,
+                        platform: 'linux/arm64',
+                        command: [
+                            'bash', '-c',
+                            'mkdir -p /asset-output/python && cp -r shared /asset-output/python/',
+                        ],
+                    },
+                }
+            ),
+            compatibleRuntimes: [lambda.Runtime.PYTHON_3_12],
+            compatibleArchitectures: [lambda.Architecture.ARM_64],
+        });
+
         //lambda for upload
         const uploadFn = new lambda.Function(this, `UploadFn-${props?.stackName}`, {
             runtime: lambda.Runtime.PYTHON_3_12,
@@ -166,6 +186,7 @@ export class InfraStack extends cdk.Stack {
             ),
             functionName: `UploadFn-${props?.stackName}`,
             timeout: cdk.Duration.seconds(30),
+            layers: [sharedLayer],
             environment: {
                 BUCKET_NAME: CommonGroundBucket.bucketName
             },
@@ -219,10 +240,12 @@ export class InfraStack extends cdk.Stack {
             ),
             functionName: `SummarizeAsyncFn-${props?.stackName}`,
             timeout: cdk.Duration.seconds(30),
+            layers: [sharedLayer],
             environment: {
                 SUMMARIZE_FUNCTION_NAME: `SummarizeFn-${props?.stackName}`,
                 BUCKET_NAME: CommonGroundBucket.bucketName,
                 TABLE_NAME: jobsTable.tableName,
+                BEDROCK_MODEL_ID: BEDROCK_MODEL_ID,
             },
         });
 
@@ -301,6 +324,7 @@ export class InfraStack extends cdk.Stack {
             functionName: `SaveEditFn-${props?.stackName}`,
             timeout: cdk.Duration.seconds(10),
             memorySize: 128,
+            layers: [sharedLayer],
             environment: {
                 TABLE_NAME: jobsTable.tableName,
             },
@@ -379,9 +403,10 @@ export class InfraStack extends cdk.Stack {
             ),
             functionName: `InfographicAsyncFn-${props?.stackName}`,
             timeout: cdk.Duration.seconds(10),
+            layers: [sharedLayer],
             environment: {
                 TABLE_NAME: jobsTable.tableName,
-                GENERATE_FUNCTION_NAME: generateInfographicFn.functionName,
+                GENERATE_INFOGRAPHIC_FUNCTION_NAME: `GenerateInfographicFn-${props?.stackName}`,
             },
         });
 
@@ -407,7 +432,7 @@ export class InfraStack extends cdk.Stack {
             functionName: `EditInfographicFn-${props?.stackName}`,
             timeout: cdk.Duration.seconds(30),
             memorySize: 256,
-            layers: [infographicSharedLayer],
+            layers: [infographicSharedLayer, sharedLayer],
             environment: {
                 TABLE_NAME: jobsTable.tableName,
                 BUCKET_NAME: CommonGroundBucket.bucketName,

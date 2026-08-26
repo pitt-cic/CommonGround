@@ -22,6 +22,7 @@ from schemas import (
     NotApplicable,
 )
 from shared.verify import verify_all_citations
+from shared.response import _response
 
 s3 = boto3.client("s3")
 bedrock_client = boto3.client("bedrock-runtime")
@@ -48,13 +49,6 @@ CORS_HEADERS = {
     "Access-Control-Allow-Methods": "OPTIONS,POST",
 }
 
-
-def _response(status_code, body_dict):
-    return {
-        "statusCode": status_code,
-        "headers": CORS_HEADERS,
-        "body": json.dumps(body_dict),
-    }
 
 
 def _build_agent(output_type, guidance, audience=None, custom_audience_details=None):

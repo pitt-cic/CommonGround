@@ -16,9 +16,6 @@ export const OUTPUT_TYPES = [
 ] as const;
 export type OutputTypeId = (typeof OUTPUT_TYPES)[number]['id'];
 
-export const MODEL = { id: 'sonnet', label: 'Sonnet', apiId: 'sonnet-4-6' } as const;
-export type ModelId = 'sonnet';
-
 export type CustomAudience = string;
 
 export const INFOGRAPHIC_TEMPLATES = [
