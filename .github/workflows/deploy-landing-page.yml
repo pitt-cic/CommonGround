@@ -27,6 +27,21 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: './page/commonground-landing/package-lock.json'
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: ./page/commonground-landing
+
+      - name: Build
+        run: npm run build
+        working-directory: ./page/commonground-landing
+
       - name: Setup Pages
         uses: actions/configure-pages@v4
 
