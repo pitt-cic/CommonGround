@@ -31,7 +31,10 @@
 ---
 
 # Demo
-https://github.com/user-attachments/assets/6787744d-7731-4bf7-b088-21b04724eb30
+
+
+https://github.com/user-attachments/assets/0e9acca1-324e-4865-9c5d-7acb56a75200
+
 
 ---
 
@@ -57,7 +60,7 @@ CommonGround addresses these challenges through an intelligent document transfor
 
 # Architecture
 
-<img width="1930" height="860" alt="Architecture Diagram" src="https://github.com/user-attachments/assets/d14bebc3-882f-4423-b32e-41d82748e855" />
+<img width="1930" height="860" alt="Architecture Diagram" src="media/Arch_Diagram.png" />
 
 ---
 
