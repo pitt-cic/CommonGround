@@ -31,8 +31,7 @@
 ---
 
 # Demo
-<video src="media/demo.mp4" controls width="100%"></video>
-
+https://github.com/user-attachments/assets/5ffefa11-0e13-4790-9c08-8997daac490
 ---
 
 # Description
