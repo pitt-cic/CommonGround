@@ -32,7 +32,7 @@
 
 # Demo
 
-<video src="media/commonground_demo.mp4" controls width="100%"></video>
+<video src="media/demo.mp4" controls width="100%"></video>
 
 ---
 
