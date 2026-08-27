@@ -334,7 +334,7 @@ export async function generateInfographic(
       const svg = await svgResponse.text();
       return { job_id: jobId, svg_content: svg, s3_key: '', cost: { input_tokens: 0, output_tokens: 0 } };
     } else if (infStatus === 'not_applicable') {
-      return { not_applicable: true, template_id: canonical, reason: (status as any)[reasonKey] ?? 'Template does not fit this paper.' };
+      return { not_applicable: true, template_id: templateId, reason: (status as any)[reasonKey] ?? 'Template does not fit this paper.' };
     } else if (infStatus === 'failed') {
       throw new Error('Infographic generation failed. Please try again.');
     }
