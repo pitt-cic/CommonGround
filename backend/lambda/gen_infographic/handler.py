@@ -23,7 +23,7 @@ lambda_client = boto3.client("lambda")
 dynamodb = boto3.resource("dynamodb")
 table = dynamodb.Table(os.environ["TABLE_NAME"])
 
-GENERATE_FUNCTION = os.environ["GENERATE_INFOGRAPHIC_FUNCTION_NAME"]
+GENERATE_INFOGRAPHIC_FUNCTION_NAME = os.environ["GENERATE_INFOGRAPHIC_FUNCTION_NAME"]
 
 CORS_HEADERS = {
     "Content-Type": "application/json",
@@ -34,7 +34,6 @@ CORS_HEADERS = {
 
 VALID_TEMPLATES = {
     "stat_grid", "key_findings", "pull_quote", "comparison", "method_steps",
-    "template-1", "template-2", "template-3",
 }
 
 MAX_INFOGRAPHIC_GENERATIONS = 50
@@ -55,10 +54,6 @@ def handler(event, context):
     if template_id not in VALID_TEMPLATES:
         return _response(400, {"error": "Invalid template_id", "valid": sorted(VALID_TEMPLATES)})
 
-    # Resolve aliases to canonical names (same as generate handler)
-    aliases = {"template-1": "stat_grid", "template-2": "method_steps", "template-3": "key_findings"}
-    canonical = aliases.get(template_id, template_id)
-
     # Check per-job infographic generation cap
     try:
         job = table.get_item(Key={"job_id": job_id}, ConsistentRead=True).get("Item")
@@ -72,7 +67,7 @@ def handler(event, context):
         return _response(429, {"error": f"Infographic generation limit of {MAX_INFOGRAPHIC_GENERATIONS} reached for this job."})
 
     # Mark as processing in DynamoDB (only if job exists)
-    status_attr = f"infographic_{canonical}_status"
+    status_attr = f"infographic_{template_id}_status"
     try:
         table.update_item(
             Key={"job_id": job_id},
@@ -95,7 +90,7 @@ def handler(event, context):
 
     try:
         lambda_client.invoke(
-            FunctionName=GENERATE_FUNCTION,
+            FunctionName=GENERATE_INFOGRAPHIC_FUNCTION_NAME,
             InvocationType="Event",  # async
             Payload=json.dumps(payload),
         )
@@ -104,6 +99,6 @@ def handler(event, context):
 
     return _response(202, {
         "job_id": job_id,
-        "template_id": canonical,
+        "template_id": template_id,
         "status": "processing",
     })

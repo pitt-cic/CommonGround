@@ -35,12 +35,7 @@ BUCKET_NAME = os.environ["BUCKET_NAME"]
 BEDROCK_MODEL_ID = os.environ["BEDROCK_MODEL_ID"]
 PRICING_KEY = "sonnet-4-6"
 
-TEMPLATE_ALIASES = {
-    "template-1": "stat_grid",
-    "template-2": "method_steps",
-    "template-3": "key_findings",
-}
-VALID_TEMPLATES = set(TEMPLATE_REGISTRY) | set(TEMPLATE_ALIASES)
+VALID_TEMPLATES = set(TEMPLATE_REGISTRY)
 
 CORS_HEADERS = {
     "Content-Type": "application/json",
@@ -123,7 +118,7 @@ def handler(event, context):
 
     if requested not in VALID_TEMPLATES:
         return _response(400, {"error": "Invalid template_id", "valid": sorted(TEMPLATE_REGISTRY)})
-    template_id = TEMPLATE_ALIASES.get(requested, requested)
+    template_id = requested
 
     try:
         job = table.get_item(Key={"job_id": job_id}, ConsistentRead=True).get("Item")
