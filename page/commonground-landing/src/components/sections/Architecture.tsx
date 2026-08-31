@@ -29,7 +29,7 @@ export function Architecture() {
         >
           <div className="glow-card p-8">
             <img
-              src="/Arch_Diagram.png"
+              src={`${import.meta.env.BASE_URL}Arch_Diagram.png`}
               alt="CommonGround Architecture Diagram"
               className="w-full h-auto rounded-lg"
             />

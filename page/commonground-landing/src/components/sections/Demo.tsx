@@ -33,7 +33,7 @@ export function Demo() {
               className="w-full aspect-video bg-[var(--color-bg-tertiary)]"
               poster="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1280 720'%3E%3Crect fill='%231a1a1a' width='1280' height='720'/%3E%3C/svg%3E"
             >
-              <source src="/demo.mp4" type="video/mp4" />
+              <source src={`${import.meta.env.BASE_URL}demo.mp4`} type="video/mp4" />
               Your browser does not support the video tag.
             </video>
           </div>
