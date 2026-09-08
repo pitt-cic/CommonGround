@@ -1,14 +1,10 @@
 """
-Async trigger for infographic generation.
+Common Ground - Infographic Enqueue Lambda
+Path: backend/lambda/infographic_enqueue/handler.py
 
 POST /papers/summarize/{job_id}/infographic
-- Writes infographic_{template_id}_status = "processing" to DynamoDB
-- Invokes GenerateInfographicFn asynchronously
-- Returns 202 immediately
-
-The worker updates DynamoDB with status/svg when done.
-Frontend polls GET /papers/summarize/{job_id} and reads
-infographic_{template_id}_status and infographic_{template_id}_svg.
+Validates request, marks status processing, enqueues to SQS.
+Returns 202 immediately; InfographicWorkerFn processes the job.
 """
 
 import json
@@ -19,25 +15,17 @@ import boto3
 from botocore.exceptions import ClientError
 from shared.response import _response
 
-lambda_client = boto3.client("lambda")
+sqs_client = boto3.client("sqs")
 dynamodb = boto3.resource("dynamodb")
 table = dynamodb.Table(os.environ["TABLE_NAME"])
 
-GENERATE_INFOGRAPHIC_FUNCTION_NAME = os.environ["GENERATE_INFOGRAPHIC_FUNCTION_NAME"]
-
-CORS_HEADERS = {
-    "Content-Type": "application/json",
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Headers": "Content-Type,Authorization",
-    "Access-Control-Allow-Methods": "OPTIONS,POST",
-}
+INFOGRAPHIC_QUEUE_URL = os.environ["INFOGRAPHIC_QUEUE_URL"]
 
 VALID_TEMPLATES = {
     "stat_grid", "key_findings", "pull_quote", "comparison", "method_steps",
 }
 
 MAX_INFOGRAPHIC_GENERATIONS = 50
-
 
 
 def handler(event, context):
@@ -54,19 +42,18 @@ def handler(event, context):
     if template_id not in VALID_TEMPLATES:
         return _response(400, {"error": "Invalid template_id", "valid": sorted(VALID_TEMPLATES)})
 
-    # Check per-job infographic generation cap
     try:
         job = table.get_item(Key={"job_id": job_id}, ConsistentRead=True).get("Item")
     except ClientError as e:
         return _response(502, {"error": "Could not read job", "detail": str(e)})
     if not job:
         return _response(404, {"error": "Job not found"})
+
     cost_entries = job.get("cost_entries") or []
     infographic_count = sum(1 for e in cost_entries if e.get("type") == "infographic_generation")
     if infographic_count >= MAX_INFOGRAPHIC_GENERATIONS:
         return _response(429, {"error": f"Infographic generation limit of {MAX_INFOGRAPHIC_GENERATIONS} reached for this job."})
 
-    # Mark as processing in DynamoDB (only if job exists)
     status_attr = f"infographic_{template_id}_status"
     try:
         table.update_item(
@@ -81,22 +68,22 @@ def handler(event, context):
             return _response(404, {"error": "Job not found"})
         return _response(502, {"error": "Could not update job", "detail": str(e)})
 
-    # Invoke the generate Lambda asynchronously, passing original event context
     payload = {
+        "job_type": "generate_infographic",
         "job_id": job_id,
         "template_id": template_id,
         "regenerate": body.get("regenerate", False),
     }
 
     try:
-        lambda_client.invoke(
-            FunctionName=GENERATE_INFOGRAPHIC_FUNCTION_NAME,
-            InvocationType="Event",  # async
-            Payload=json.dumps(payload),
+        sqs_client.send_message(
+            QueueUrl=INFOGRAPHIC_QUEUE_URL,
+            MessageBody=json.dumps(payload),
         )
     except ClientError as e:
-        return _response(502, {"error": "Could not invoke generate function", "detail": str(e)})
+        return _response(502, {"error": "Could not enqueue infographic job", "detail": str(e)})
 
+    print(f"Enqueued infographic job {job_id} template {template_id}")
     return _response(202, {
         "job_id": job_id,
         "template_id": template_id,
