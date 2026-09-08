@@ -88,6 +88,11 @@ export interface RefineResponse {
   messages: Array<{ role: string; content: string }>;
 }
 
+export interface RefineEnqueueResponse {
+  job_id: string;
+  status: 'refining';
+}
+
 export interface SaveEditResponse {
   job_id: string;
   status: 'saved';
@@ -234,7 +239,23 @@ export async function refineOutput(jobId: string, message: string): Promise<Refi
     throw new Error(error.error || `HTTP ${response.status}: ${response.statusText}`);
   }
 
-  return response.json();
+  // Poll until refine worker completes
+  for (let attempt = 0; attempt < 60; attempt++) {
+    await new Promise(resolve => setTimeout(resolve, 3000));
+    const status = await checkJobStatus(jobId);
+    if (status.job_status === 'completed') {
+      return {
+        job_id: jobId,
+        status: 'completed',
+        current_output: status.current_output ?? '',
+        messages: status.messages ?? [],
+      };
+    } else if (status.job_status === 'failed') {
+      throw new Error(status.job_error || 'Refine failed. Please try again.');
+    }
+  }
+
+  throw new Error('Refine timed out. Please try again.');
 }
 
 /**
@@ -378,7 +399,32 @@ export async function polishInfographic(
     throw new Error(error.error || `HTTP ${response.status}: ${response.statusText}`);
   }
 
-  return response.json();
+  // Poll until polish worker completes
+  const statusKey = `infographic_${templateId}_status` as `infographic_${string}_status`;
+  const reasonKey = `infographic_${templateId}_reason` as `infographic_${string}_reason`;
+
+  for (let attempt = 0; attempt < 60; attempt++) {
+    await new Promise(resolve => setTimeout(resolve, 3000));
+    const status = await checkJobStatus(jobId);
+    const infStatus = status[statusKey];
+
+    if (infStatus === 'completed') {
+      const presignedUrl = status.infographic_urls?.[templateId];
+      if (!presignedUrl) {
+        throw new Error('Infographic URL not available after polish');
+      }
+      const svgResponse = await fetch(presignedUrl);
+      if (!svgResponse.ok) {
+        throw new Error(`Failed to fetch polished infographic: HTTP ${svgResponse.status}`);
+      }
+      const svg = await svgResponse.text();
+      return { job_id: jobId, template_id: templateId, svg_content: svg, s3_key: '', cost: { input_tokens: 0, output_tokens: 0 } };
+    } else if (infStatus === 'failed') {
+      throw new Error(status[reasonKey] ?? 'Infographic polish failed. Please try again.');
+    }
+  }
+
+  throw new Error('Infographic polish timed out. Please try again.');
 }
 
 // ─── Infographic Content Editing ────────────────────────
