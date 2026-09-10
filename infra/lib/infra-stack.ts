@@ -7,6 +7,8 @@ import * as amplify from 'aws-cdk-lib/aws-amplify';
 import * as path from 'path';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as iam from 'aws-cdk-lib/aws-iam';
+import * as sqs from 'aws-cdk-lib/aws-sqs';
+import * as lambdaEventSources from 'aws-cdk-lib/aws-lambda-event-sources';
 import { Construct } from 'constructs';
 
 const BEDROCK_MODEL_ID = 'us.anthropic.claude-sonnet-4-6';
@@ -166,6 +168,40 @@ export class InfraStack extends cdk.Stack {
             compatibleArchitectures: [lambda.Architecture.ARM_64],
         });
 
+        // SQS Dead Letter Queues
+        const summarizeDlq = new sqs.Queue(this, `SummarizeDLQ-${props?.stackName}`, {
+            queueName: `SummarizeDLQ-${props?.stackName}`,
+            retentionPeriod: cdk.Duration.days(14),
+        });
+
+        const infographicDlq = new sqs.Queue(this, `InfographicDLQ-${props?.stackName}`, {
+            queueName: `InfographicDLQ-${props?.stackName}`,
+            retentionPeriod: cdk.Duration.days(14),
+        });
+
+        // SQS Main Queues
+        const summarizeQueue = new sqs.Queue(this, `SummarizeQueue-${props?.stackName}`, {
+            queueName: `SummarizeQueue-${props?.stackName}`,
+            visibilityTimeout: cdk.Duration.seconds(930), // 15min Lambda timeout + 30s buffer
+            receiveMessageWaitTime: cdk.Duration.seconds(20),
+            retentionPeriod: cdk.Duration.days(4),
+            deadLetterQueue: {
+                queue: summarizeDlq,
+                maxReceiveCount: 3,
+            },
+        });
+
+        const infographicQueue = new sqs.Queue(this, `InfographicQueue-${props?.stackName}`, {
+            queueName: `InfographicQueue-${props?.stackName}`,
+            visibilityTimeout: cdk.Duration.seconds(150), // 2min Lambda timeout + 30s buffer
+            receiveMessageWaitTime: cdk.Duration.seconds(20),
+            retentionPeriod: cdk.Duration.days(4),
+            deadLetterQueue: {
+                queue: infographicDlq,
+                maxReceiveCount: 3,
+            },
+        });
+
         //lambda for upload
         const uploadFn = new lambda.Function(this, `UploadFn-${props?.stackName}`, {
             runtime: lambda.Runtime.PYTHON_3_12,
@@ -192,41 +228,13 @@ export class InfraStack extends cdk.Stack {
             },
         });
 
-        //lambda for summarize (worker - invoked async)
-        const summarizeFn = new lambda.Function(this, `SummarizeFn-${props?.stackName}`, {
+        // Summarize enqueue Lambda - fast API handler, sends to SQS
+        const summarizeEnqueueFn = new lambda.Function(this, `SummarizeEnqueueFn-${props?.stackName}`, {
             runtime: lambda.Runtime.PYTHON_3_12,
             architecture: lambda.Architecture.ARM_64,
             handler: 'handler.handler',
             code: lambda.Code.fromAsset(
-                path.join(__dirname, '../../backend/lambda'),
-                {
-                    bundling: {
-                        image: lambda.Runtime.PYTHON_3_12.bundlingImage,
-                        platform: 'linux/arm64',
-                        command: [
-                            'bash', '-c',
-                            'pip install -r summarize_async/requirements.txt -t /asset-output && cp -r summarize_async/. /asset-output && cp -r shared /asset-output/shared',
-                        ],
-                    },
-                }
-            ),
-            functionName: `SummarizeFn-${props?.stackName}`,
-            timeout: cdk.Duration.minutes(15),
-            memorySize: 512,
-            environment: {
-                BUCKET_NAME: CommonGroundBucket.bucketName,
-                BEDROCK_MODEL_ID: BEDROCK_MODEL_ID,
-                TABLE_NAME: jobsTable.tableName,
-            },
-        });
-
-        //lambda for async summarize trigger
-        const summarizeAsyncFn = new lambda.Function(this, `SummarizeAsyncFn-${props?.stackName}`, {
-            runtime: lambda.Runtime.PYTHON_3_12,
-            architecture: lambda.Architecture.ARM_64,
-            handler: 'handler.handler',
-            code: lambda.Code.fromAsset(
-                path.join(__dirname, '../../backend/lambda/gen_summary'),
+                path.join(__dirname, '../../backend/lambda/summarize_enqueue'),
                 {
                     bundling: {
                         image: lambda.Runtime.PYTHON_3_12.bundlingImage,
@@ -238,14 +246,43 @@ export class InfraStack extends cdk.Stack {
                     },
                 }
             ),
-            functionName: `SummarizeAsyncFn-${props?.stackName}`,
+            functionName: `SummarizeEnqueueFn-${props?.stackName}`,
             timeout: cdk.Duration.seconds(30),
             layers: [sharedLayer],
             environment: {
-                SUMMARIZE_FUNCTION_NAME: `SummarizeFn-${props?.stackName}`,
+                SUMMARIZE_QUEUE_URL: summarizeQueue.queueUrl,
                 BUCKET_NAME: CommonGroundBucket.bucketName,
                 TABLE_NAME: jobsTable.tableName,
                 BEDROCK_MODEL_ID: BEDROCK_MODEL_ID,
+            },
+        });
+
+        // Summarize worker Lambda - SQS-triggered, processes jobs (15 min)
+        const summarizeWorkerFn = new lambda.Function(this, `SummarizeWorkerFn-${props?.stackName}`, {
+            runtime: lambda.Runtime.PYTHON_3_12,
+            architecture: lambda.Architecture.ARM_64,
+            handler: 'handler.handler',
+            code: lambda.Code.fromAsset(
+                path.join(__dirname, '../../backend/lambda'),
+                {
+                    bundling: {
+                        image: lambda.Runtime.PYTHON_3_12.bundlingImage,
+                        platform: 'linux/arm64',
+                        command: [
+                            'bash', '-c',
+                            'pip install -r summarize_worker/requirements.txt -t /asset-output && cp -r summarize_worker/. /asset-output && cp -r shared /asset-output/shared',
+                        ],
+                    },
+                }
+            ),
+            functionName: `SummarizeWorkerFn-${props?.stackName}`,
+            timeout: cdk.Duration.minutes(15),
+            memorySize: 512,
+            environment: {
+                BUCKET_NAME: CommonGroundBucket.bucketName,
+                BEDROCK_MODEL_ID: BEDROCK_MODEL_ID,
+                TABLE_NAME: jobsTable.tableName,
+                INFOGRAPHIC_QUEUE_URL: infographicQueue.queueUrl,
             },
         });
 
@@ -275,33 +312,6 @@ export class InfraStack extends cdk.Stack {
             },
         });
 
-        //lambda for refine
-        const refineFn = new lambda.Function(this, `RefineFn-${props?.stackName}`, {
-            runtime: lambda.Runtime.PYTHON_3_12,
-            architecture: lambda.Architecture.ARM_64,
-            handler: 'handler.handler',
-            code: lambda.Code.fromAsset(
-                path.join(__dirname, '../../backend/lambda'),
-                {
-                    bundling: {
-                        image: lambda.Runtime.PYTHON_3_12.bundlingImage,
-                        platform: 'linux/arm64',
-                        command: [
-                            'bash', '-c',
-                            'pip install -r refine/requirements.txt -t /asset-output && cp -r refine/. /asset-output && cp -r shared /asset-output/shared',
-                        ],
-                    },
-                }
-            ),
-            functionName: `RefineFn-${props?.stackName}`,
-            timeout: cdk.Duration.minutes(15),
-            memorySize: 512,
-            environment: {
-                TABLE_NAME: jobsTable.tableName,
-                BUCKET_NAME: CommonGroundBucket.bucketName,
-                BEDROCK_MODEL_ID: BEDROCK_MODEL_ID,
-            },
-        });
 
         //lambda for save edit - allows users to save manually edited output
         const saveEditFn = new lambda.Function(this, `SaveEditFn-${props?.stackName}`, {
@@ -342,8 +352,8 @@ export class InfraStack extends cdk.Stack {
                         command: [
                             'bash', '-c',
                             'mkdir -p /asset-output/python && ' +
-                            'cp infographic_async/render.py infographic_async/schemas.py /asset-output/python/ && ' +
-                            'cp -r infographic_async/templates /asset-output/python/',
+                            'cp infographic_worker/render.py infographic_worker/schemas.py /asset-output/python/ && ' +
+                            'cp -r infographic_worker/templates /asset-output/python/',
                         ],
                     },
                 }
@@ -352,8 +362,8 @@ export class InfraStack extends cdk.Stack {
             compatibleArchitectures: [lambda.Architecture.ARM_64],
         });
 
-        // Lambda for infographic generation (worker - invoked async)
-        const generateInfographicFn = new lambda.Function(this, `GenerateInfographicFn-${props?.stackName}`, {
+        // Infographic worker Lambda - SQS-triggered, processes jobs (2 min)
+        const infographicWorkerFn = new lambda.Function(this, `InfographicWorkerFn-${props?.stackName}`, {
             runtime: lambda.Runtime.PYTHON_3_12,
             architecture: lambda.Architecture.ARM_64,
             handler: 'handler.handler',
@@ -365,14 +375,14 @@ export class InfraStack extends cdk.Stack {
                         platform: 'linux/arm64',
                         command: [
                             'bash', '-c',
-                            'pip install -r infographic_async/requirements.txt -t /asset-output && ' +
-                            'cp infographic_async/handler.py infographic_async/lint.py /asset-output/ && ' +
+                            'pip install -r infographic_worker/requirements.txt -t /asset-output && ' +
+                            'cp infographic_worker/handler.py /asset-output/ && ' +
                             'cp -r shared /asset-output/shared',
                         ],
                     },
                 }
             ),
-            functionName: `GenerateInfographicFn-${props?.stackName}`,
+            functionName: `InfographicWorkerFn-${props?.stackName}`,
             timeout: cdk.Duration.seconds(120),
             memorySize: 256,
             layers: [infographicSharedLayer],
@@ -383,13 +393,13 @@ export class InfraStack extends cdk.Stack {
             },
         });
 
-        // Lambda for infographic async trigger (fast - returns 202 immediately)
-        const infographicAsyncFn = new lambda.Function(this, `InfographicAsyncFn-${props?.stackName}`, {
+        // Infographic enqueue Lambda - fast API handler, sends to SQS
+        const infographicEnqueueFn = new lambda.Function(this, `InfographicEnqueueFn-${props?.stackName}`, {
             runtime: lambda.Runtime.PYTHON_3_12,
             architecture: lambda.Architecture.ARM_64,
             handler: 'handler.handler',
             code: lambda.Code.fromAsset(
-                path.join(__dirname, '../../backend/lambda/gen_infographic'),
+                path.join(__dirname, '../../backend/lambda/infographic_enqueue'),
                 {
                     bundling: {
                         image: lambda.Runtime.PYTHON_3_12.bundlingImage,
@@ -401,12 +411,12 @@ export class InfraStack extends cdk.Stack {
                     },
                 }
             ),
-            functionName: `InfographicAsyncFn-${props?.stackName}`,
+            functionName: `InfographicEnqueueFn-${props?.stackName}`,
             timeout: cdk.Duration.seconds(10),
             layers: [sharedLayer],
             environment: {
                 TABLE_NAME: jobsTable.tableName,
-                GENERATE_INFOGRAPHIC_FUNCTION_NAME: `GenerateInfographicFn-${props?.stackName}`,
+                INFOGRAPHIC_QUEUE_URL: infographicQueue.queueUrl,
             },
         });
 
@@ -439,64 +449,99 @@ export class InfraStack extends cdk.Stack {
             },
         });
 
-        // Lambda for infographic polish
-        const polishInfographicFn = new lambda.Function(this, `PolishInfographicFn-${props?.stackName}`, {
+        // Polish enqueue Lambda - validates request, sends to InfographicQueue
+        const polishEnqueueFn = new lambda.Function(this, `PolishEnqueueFn-${props?.stackName}`, {
             runtime: lambda.Runtime.PYTHON_3_12,
             architecture: lambda.Architecture.ARM_64,
-            handler: 'polish_infographic.handler.handler',
+            handler: 'handler.handler',
             code: lambda.Code.fromAsset(
-                path.join(__dirname, '../../backend/lambda'),
+                path.join(__dirname, '../../backend/lambda/polish_enqueue'),
                 {
                     bundling: {
                         image: lambda.Runtime.PYTHON_3_12.bundlingImage,
                         platform: 'linux/arm64',
                         command: [
                             'bash', '-c',
-                            'pip install -r polish_infographic/requirements.txt -t /asset-output && ' +
-                            'cp -r polish_infographic /asset-output/ && ' +
-                            'cp -r shared /asset-output/shared',
+                            'pip install -r requirements.txt -t /asset-output && cp -r . /asset-output',
                         ],
                     },
                 }
             ),
-            functionName: `PolishInfographicFn-${props?.stackName}`,
-            timeout: cdk.Duration.seconds(120),
-            memorySize: 256,
-            layers: [infographicSharedLayer],
+            functionName: `PolishEnqueueFn-${props?.stackName}`,
+            timeout: cdk.Duration.seconds(10),
+            layers: [sharedLayer],
             environment: {
                 TABLE_NAME: jobsTable.tableName,
-                BUCKET_NAME: CommonGroundBucket.bucketName,
-                BEDROCK_MODEL_ID: BEDROCK_MODEL_ID,
+                INFOGRAPHIC_QUEUE_URL: infographicQueue.queueUrl,
             },
         });
 
+        // Refine enqueue Lambda - validates request, sends to SummarizeQueue
+        const refineEnqueueFn = new lambda.Function(this, `RefineEnqueueFn-${props?.stackName}`, {
+            runtime: lambda.Runtime.PYTHON_3_12,
+            architecture: lambda.Architecture.ARM_64,
+            handler: 'handler.handler',
+            code: lambda.Code.fromAsset(
+                path.join(__dirname, '../../backend/lambda/refine_enqueue'),
+                {
+                    bundling: {
+                        image: lambda.Runtime.PYTHON_3_12.bundlingImage,
+                        platform: 'linux/arm64',
+                        command: [
+                            'bash', '-c',
+                            'pip install -r requirements.txt -t /asset-output && cp -r . /asset-output',
+                        ],
+                    },
+                }
+            ),
+            functionName: `RefineEnqueueFn-${props?.stackName}`,
+            timeout: cdk.Duration.seconds(10),
+            layers: [sharedLayer],
+            environment: {
+                TABLE_NAME: jobsTable.tableName,
+                SUMMARIZE_QUEUE_URL: summarizeQueue.queueUrl,
+            },
+        });
+
+        // SQS event source mappings for worker Lambdas
+        summarizeWorkerFn.addEventSource(new lambdaEventSources.SqsEventSource(summarizeQueue, {
+            batchSize: 1,
+            reportBatchItemFailures: true,
+            maxConcurrency: 30,
+            maxBatchingWindow: cdk.Duration.seconds(0),
+        }));
+
+        infographicWorkerFn.addEventSource(new lambdaEventSources.SqsEventSource(infographicQueue, {
+            batchSize: 1,
+            reportBatchItemFailures: true,
+            maxConcurrency: 50,
+            maxBatchingWindow: cdk.Duration.seconds(0),
+        }));
+
         //grant permissions
         CommonGroundBucket.grantReadWrite(uploadFn);
-        CommonGroundBucket.grantReadWrite(summarizeFn);
-        CommonGroundBucket.grantReadWrite(summarizeAsyncFn);  // Needs to write pending marker
+        CommonGroundBucket.grantReadWrite(summarizeWorkerFn);
         CommonGroundBucket.grantRead(jobStatusFn);
-        CommonGroundBucket.grantRead(refineFn);
-        CommonGroundBucket.grantReadWrite(generateInfographicFn);
-        CommonGroundBucket.grantReadWrite(polishInfographicFn);
+        CommonGroundBucket.grantReadWrite(infographicWorkerFn);
         CommonGroundBucket.grantReadWrite(editInfographicFn);
 
-        // Allow summarizeAsyncFn to invoke summarizeFn
-        summarizeFn.grantInvoke(summarizeAsyncFn);
-        // Allow infographicAsyncFn to invoke generateInfographicFn
-        generateInfographicFn.grantInvoke(infographicAsyncFn);
-        // Allow summarizeFn to invoke generateInfographicFn (for parallel infographic generation)
-        generateInfographicFn.grantInvoke(summarizeFn);
-        summarizeFn.addEnvironment('GENERATE_INFOGRAPHIC_FUNCTION_NAME', generateInfographicFn.functionName);
+        // SQS permissions: enqueue functions send, workers receive (granted via event source)
+        summarizeQueue.grantSendMessages(summarizeEnqueueFn);
+        summarizeQueue.grantSendMessages(refineEnqueueFn);
+        infographicQueue.grantSendMessages(infographicEnqueueFn);
+        infographicQueue.grantSendMessages(polishEnqueueFn);
+        infographicQueue.grantSendMessages(summarizeWorkerFn); // worker triggers infographic after summary
 
-        jobsTable.grantReadWriteData(summarizeFn);
-        jobsTable.grantReadWriteData(summarizeAsyncFn);
+        jobsTable.grantReadWriteData(summarizeEnqueueFn);
+        jobsTable.grantReadWriteData(summarizeWorkerFn);
         jobsTable.grantReadWriteData(jobStatusFn);
-        jobsTable.grantReadWriteData(refineFn);
+        jobsTable.grantReadWriteData(refineEnqueueFn);
         jobsTable.grantReadWriteData(saveEditFn);
-        jobsTable.grantReadWriteData(generateInfographicFn);
-        jobsTable.grantReadWriteData(infographicAsyncFn);
-        jobsTable.grantReadWriteData(polishInfographicFn);
+        jobsTable.grantReadWriteData(infographicWorkerFn);
+        jobsTable.grantReadWriteData(infographicEnqueueFn);
+        jobsTable.grantReadWriteData(polishEnqueueFn);
         jobsTable.grantReadWriteData(editInfographicFn);
+
         const bedrockPolicy = new iam.PolicyStatement({
             actions: ['bedrock:InvokeModel', 'bedrock:InvokeModelWithResponseStream'],
             resources: [
@@ -506,10 +551,8 @@ export class InfraStack extends cdk.Stack {
             ],
         });
 
-        summarizeFn.addToRolePolicy(bedrockPolicy);
-        refineFn.addToRolePolicy(bedrockPolicy);
-        generateInfographicFn.addToRolePolicy(bedrockPolicy);
-        polishInfographicFn.addToRolePolicy(bedrockPolicy);
+        summarizeWorkerFn.addToRolePolicy(bedrockPolicy);
+        infographicWorkerFn.addToRolePolicy(bedrockPolicy);
 
         const papersResource = api.root.addResource('papers');
 
@@ -520,8 +563,7 @@ export class InfraStack extends cdk.Stack {
         });
 
         const summarizeResource = papersResource.addResource('summarize');
-        // Use async trigger instead of direct summarize
-        summarizeResource.addMethod('POST', new apigateway.LambdaIntegration(summarizeAsyncFn), {
+        summarizeResource.addMethod('POST', new apigateway.LambdaIntegration(summarizeEnqueueFn), {
             authorizer,
             authorizationType: apigateway.AuthorizationType.COGNITO,
         });
@@ -535,7 +577,7 @@ export class InfraStack extends cdk.Stack {
 
         // Add POST endpoint for refine: /papers/summarize/{job_id}/refine
         const refineResource = jobIdResource.addResource('refine');
-        refineResource.addMethod('POST', new apigateway.LambdaIntegration(refineFn), {
+        refineResource.addMethod('POST', new apigateway.LambdaIntegration(refineEnqueueFn), {
             authorizer,
             authorizationType: apigateway.AuthorizationType.COGNITO,
         });
@@ -548,16 +590,16 @@ export class InfraStack extends cdk.Stack {
         });
 
         // Add POST endpoint for infographic: /papers/summarize/{job_id}/infographic
-        // Uses async trigger — returns 202 immediately, frontend polls job_status for completion
+        // Enqueues to SQS — returns 202 immediately, frontend polls job_status for completion
         const infographicResource = jobIdResource.addResource('infographic');
-        infographicResource.addMethod('POST', new apigateway.LambdaIntegration(infographicAsyncFn), {
+        infographicResource.addMethod('POST', new apigateway.LambdaIntegration(infographicEnqueueFn), {
             authorizer,
             authorizationType: apigateway.AuthorizationType.COGNITO,
         });
 
         // Add POST endpoint for infographic polish: /papers/summarize/{job_id}/infographic/polish
         const infographicPolishResource = infographicResource.addResource('polish');
-        infographicPolishResource.addMethod('POST', new apigateway.LambdaIntegration(polishInfographicFn), {
+        infographicPolishResource.addMethod('POST', new apigateway.LambdaIntegration(polishEnqueueFn), {
             authorizer,
             authorizationType: apigateway.AuthorizationType.COGNITO,
         });
