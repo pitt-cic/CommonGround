@@ -60,7 +60,7 @@ CommonGround addresses these challenges through an intelligent document transfor
 
 # Architecture
 
-<img width="1930" height="860" alt="Architecture Diagram" src="media/Arch_Diagram.png" />
+<img width="1930" height="860" alt="Architecture Diagram" src="media/architecture.png" />
 
 ---
 
